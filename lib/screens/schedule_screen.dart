@@ -31,14 +31,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     6: 'Sabtu',
   };
 
-  Future> _loadScheduleAndPacking(String profile) async {
+  Future<dynamic> _loadScheduleAndPacking(String profile) async {
     final db = DatabaseHelper.instance;
     final daySchedulesRaw = await db.queryAll(
       'schedules',
       where: 'profile = ? AND day_of_week = ?',
       whereArgs: [profile, _selectedDay],
       orderBy: 'start_time ASC',
-    );
+    ) as List>;
     final daySchedules =
         daySchedulesRaw.map((e) => ScheduleItem.fromMap(e)).toList();
 
@@ -48,7 +48,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       where: 'profile = ? AND day_of_week = ?',
       whereArgs: [profile, tomorrowWeekday],
       orderBy: 'start_time ASC',
-    );
+    ) as List>;
     final tomorrowSchedules =
         tomorrowRaw.map((e) => ScheduleItem.fromMap(e)).toList();
 
@@ -234,11 +234,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                final data = snapshot.data!;
-                final List<ScheduleItem> schedules = data['daySchedules'];
-                final int tomorrowWeekday = data['tomorrowWeekday'];
-                final List<String> tomorrowItems = data['tomorrowItems'];
-                final Map<String, bool> checkStates = data['checkStates'];
+                final data = snapshot.data as Map<String, dynamic>;
+                final List<ScheduleItem> schedules =
+                    data['daySchedules'] as List<ScheduleItem>;
+                final int tomorrowWeekday = data['tomorrowWeekday'] as int;
+                final List<String> tomorrowItems =
+                    data['tomorrowItems'] as List<String>;
+                final Map<String, bool> checkStates =
+                    data['checkStates'] as Map<String, bool>;
 
                 return ListView(
                   padding: const EdgeInsets.all(16),
@@ -277,7 +280,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('${s.startTime} - ${s.endTime} • ${s.room}'),
+                                Text(
+                                    '${s.startTime} - ${s.endTime} • ${s.room}'),
                                 if (s.packingItems.isNotEmpty)
                                   Text(
                                     'Bawaan: ${s.packingItems}',
@@ -334,7 +338,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             ),
                             const Divider(height: 18),
                             if (tomorrowItems.isEmpty)
-                              const Text('Tidak ada barang khusus untuk besok.')
+                              const Text(
+                                  'Tidak ada barang khusus yang perlu disiapkan.')
                             else
                               ...tomorrowItems.map((item) {
                                 final checked = checkStates[item] ?? false;

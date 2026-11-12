@@ -20,7 +20,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final NumberFormat _currencyFmt =
       NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
 
-  Future> _loadDashboardData(String activeProfile) async {
+  Future<dynamic> _loadDashboardData(String activeProfile) async {
     final db = DatabaseHelper.instance;
     final now = DateTime.now();
     final todayWeekday = now.weekday;
@@ -33,7 +33,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       where: 'profile = ? AND day_of_week = ?',
       whereArgs: [activeProfile, todayWeekday],
       orderBy: 'start_time ASC',
-    );
+    ) as List>;
     final todaySchedules =
         todaySchedulesRaw.map((e) => ScheduleItem.fromMap(e)).toList();
 
@@ -42,7 +42,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       where: 'profile = ? AND day_of_week = ?',
       whereArgs: [activeProfile, tomorrowWeekday],
       orderBy: 'start_time ASC',
-    );
+    ) as List>;
     final tomorrowSchedules =
         tomorrowSchedulesRaw.map((e) => ScheduleItem.fromMap(e)).toList();
 
@@ -62,11 +62,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'tasks',
       where: 'is_completed = 0',
       orderBy: 'deadline ASC',
-    );
+    ) as List>;
     final tasks = tasksRaw.map((e) => TaskItem.fromMap(e)).toList();
 
     // 3. Hitung Daily Safe-to-Spend
-    final budgetRaw = await db.queryAll('budget_config', where: 'id = 1');
+    final budgetRaw = await db.queryAll('budget_config', where: 'id = 1')
+        as List>;
     final BudgetConfig budgetConfig = budgetRaw.isNotEmpty
         ? BudgetConfig.fromMap(budgetRaw.first)
         : BudgetConfig(
@@ -81,7 +82,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       'transactions',
       where: 'date >= ?',
       whereArgs: ['${budgetConfig.startDate} 00:00'],
-    );
+    ) as List>;
     final transactions =
         txRaw.map((e) => TransactionItem.fromMap(e)).toList();
     final double totalSpent =
@@ -97,7 +98,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         remainingBudget > 0 ? remainingBudget / remainingDays : 0.0;
 
     // 4. Cek Conflict Alert Banner (Ujian berdekatan H-3 atau bentrok dengan Event/Lomba)
-    final eventsRaw = await db.queryAll('events', orderBy: 'event_date ASC');
+    final eventsRaw = await db.queryAll('events', orderBy: 'event_date ASC')
+        as List>;
     final events = eventsRaw.map((e) => EventItem.fromMap(e)).toList();
     final List<String> conflictAlerts = [];
 
@@ -270,25 +272,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         ],
       ),
-      body: FutureBuilder>(
+      body: FutureBuilder(
         future: _loadDashboardData(appState.activeScheduleProfile),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final data = snapshot.data!;
-          final List<String> alerts = data['conflictAlerts'];
-          final double safeToSpend = data['safeToSpendToday'];
-          final double remainingBudget = data['remainingBudget'];
-          final int remainingDays = data['remainingDays'];
-          final List<ScheduleItem> todaySchedules = data['todaySchedules'];
+          final data = snapshot.data as Map<String, dynamic>;
+          final List<String> alerts = data['conflictAlerts'] as List<String>;
+          final double safeToSpend = data['safeToSpendToday'] as double;
+          final double remainingBudget = data['remainingBudget'] as double;
+          final int remainingDays = data['remainingDays'] as int;
+          final List<ScheduleItem> todaySchedules =
+              data['todaySchedules'] as List<ScheduleItem>;
           final List<ScheduleItem> tomorrowSchedules =
-              data['tomorrowSchedules'];
-          final List<String> tomorrowItems = data['tomorrowItems'];
-          final Map<String, bool> packingStatus = data['packingStatus'];
-          final int tomorrowWeekday = data['tomorrowWeekday'];
-          final List<TaskItem> tasks = data['tasks'];
+              data['tomorrowSchedules'] as List<ScheduleItem>;
+          final List<String> tomorrowItems =
+              data['tomorrowItems'] as List<String>;
+          final Map<String, bool> packingStatus =
+              data['packingStatus'] as Map<String, bool>;
+          final int tomorrowWeekday = data['tomorrowWeekday'] as int;
+          final List<TaskItem> tasks = data['tasks'] as List<TaskItem>;
 
           return RefreshIndicator(
             onRefresh: () async => setState(() {}),
@@ -512,7 +517,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     item.subjectName,
                     style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
-                  subtitle: Text('${item.startTime} - ${item.endTime} • ${item.room}'),
+                  subtitle: Text(
+                      '${item.startTime} - ${item.endTime} • ${item.room}'),
                 ),
               ),
           ],

@@ -227,7 +227,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           ),
 
           Expanded(
-            child: FutureBuilder>(
+            child: FutureBuilder(
               future: _loadScheduleAndPacking(activeProfile),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {

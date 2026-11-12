@@ -1,12 +1,16 @@
 name: Build Android APK
-on: [push, workflow_dispatch]
+​on:
+push:
+branches:
+- main
+workflow_dispatch:
 ​permissions:
 contents: write
 ​jobs:
 build-apk:
 name: Build Release APK
 runs-on: ubuntu-latest
-steps:
+​steps:
 - name: Checkout Repository
 uses: actions/checkout@v4
 ​- name: Setup Java 17
@@ -19,52 +23,28 @@ uses: subosito/flutter-action@v2
 with:
 channel: stable
 cache: true
+​- name: Backup Manifest
+run: cp android/app/src/main/AndroidManifest.xml manifest.bak || true
 ​- name: Create Android Project
-run: |
-cp android/app/src/main/AndroidManifest.xml manifest.bak || true
-flutter create . --project-name personal_student_os --platforms android
-cp manifest.bak android/app/src/main/AndroidManifest.xml || true
-​- name: Configure Gradle and Pubspec
-run: |
-test -f android/app/build.gradle.kts && sed -i 's/compileOptions {/compileOptions {\n        isCoreLibraryDesugaringEnabled = true/' android/app/build.gradle.kts
-test -f android/app/build.gradle.kts && echo 'dependencies { coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4") }' >> android/app/build.gradle.kts
-rm -f pubspec.yaml
-echo "name: personal_student_os" >> pubspec.yaml
-echo "description: Personal Student OS" >> pubspec.yaml
-echo "publish_to: none" >> pubspec.yaml
-echo "version: 1.0.0+1" >> pubspec.yaml
-echo "environment:" >> pubspec.yaml
-echo "  sdk: '>=3.4.0 <4.0.0'" >> pubspec.yaml
-echo "dependencies:" >> pubspec.yaml
-echo "  flutter:" >> pubspec.yaml
-echo "    sdk: flutter" >> pubspec.yaml
-echo "  flutter_localizations:" >> pubspec.yaml
-echo "    sdk: flutter" >> pubspec.yaml
-echo "  sqflite: ^2.3.3+1" >> pubspec.yaml
-echo "  path: ^1.9.0" >> pubspec.yaml
-echo "  provider: ^6.1.2" >> pubspec.yaml
-echo "  image_picker: ^1.1.2" >> pubspec.yaml
-echo "  path_provider: ^2.1.4" >> pubspec.yaml
-echo "  flutter_local_notifications: ^17.2.3" >> pubspec.yaml
-echo "  intl: any" >> pubspec.yaml
-echo "flutter:" >> pubspec.yaml
-echo "  uses-material-design: true" >> pubspec.yaml
-​- name: Get Dependencies
-run: flutter pub get
+run: flutter create . --project-name personal_student_os --platforms android
+​- name: Restore Manifest
+run: cp manifest.bak android/app/src/main/AndroidManifest.xml || true
+​- name: Add Flutter Packages
+run: flutter pub add flutter_localizations --sdk=flutter && flutter pub add sqflite path provider image_picker path_provider "flutter_local_notifications:^17.2.3" intl
+​- name: Configure Android Gradle
+run: python3 -c "import pathlib; kts=pathlib.Path('android/app/build.gradle.kts'); grv=pathlib.Path('android/app/build.gradle'); nl=chr(10); kts.write_text(kts.read_text().replace('compileOptions {', 'compileOptions {' + nl + '        isCoreLibraryDesugaringEnabled = true') + nl + 'dependencies {' + nl + '    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")' + nl + '}' + nl) if kts.exists() else (grv.write_text(grv.read_text().replace('compileOptions {', 'compileOptions {' + nl + '        coreLibraryDesugaringEnabled true') + nl + 'dependencies {' + nl + '    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"' + nl + '}' + nl) if grv.exists() else None)"
+​- name: Clean Default Test
+run: rm -f test/widget_test.dart
 ​- name: Build Release APK
 run: flutter build apk --release
-​- name: Prepare APK File
-run: |
-mkdir -p release-output
-cp build/app/outputs/flutter-apk/app-release.apk release-output/Personal-Student-OS.apk
 ​- name: Upload Artifact
 uses: actions/upload-artifact@v4
 with:
 name: Personal-Student-OS-APK
-path: release-output/Personal-Student-OS.apk
+path: build/app/outputs/flutter-apk/app-release.apk
 ​- name: Publish Release
 uses: softprops/action-gh-release@v2
 with:
-tag_name: "v1.0.{{ github.run_number }}"
-name: "Personal Student OS v1.0.{{ github.run_number }}"
-files: release-output/Personal-Student-OS.apk
+tag_name: v1.0.{{ github.run_number }}
+name: Personal Student OS v1.0.{{ github.run_number }}
+files: build/app/outputs/flutter-apk/app-release.apk

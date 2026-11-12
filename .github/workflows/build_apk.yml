@@ -34,7 +34,7 @@ echo "description: Personal Student OS" >> pubspec.yaml
 echo "publish_to: none" >> pubspec.yaml
 echo "version: 1.0.0+1" >> pubspec.yaml
 echo "environment:" >> pubspec.yaml
-echo "  sdk: ^3.4.0" >> pubspec.yaml
+echo "  sdk: '>=3.4.0 <4.0.0'" >> pubspec.yaml
 echo "dependencies:" >> pubspec.yaml
 echo "  flutter:" >> pubspec.yaml
 echo "    sdk: flutter" >> pubspec.yaml
@@ -65,6 +65,6 @@ path: release-output/Personal-Student-OS.apk
 ​- name: Publish Release
 uses: softprops/action-gh-release@v2
 with:
-tag_name: v1.0.{{ github.run_number }}
-name: Personal Student OS v1.0.{{ github.run_number }}
+tag_name: "v1.0.{{ github.run_number }}"
+name: "Personal Student OS v1.0.{{ github.run_number }}"
 files: release-output/Personal-Student-OS.apk

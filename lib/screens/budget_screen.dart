@@ -1,184 +1,134 @@
 import 'package:flutter/material.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../database/database_helper.dart';
 import '../main.dart';
-import '../models/budget_model.dart';
+import '../models/schedule_model.dart';
 
-class BudgetScreen extends StatefulWidget {
-  const BudgetScreen({super.key});
+class ScheduleScreen extends StatefulWidget {
+  const ScheduleScreen({super.key});
 
   @override
-  State<BudgetScreen> createState() => _BudgetScreenState();
+  State<ScheduleScreen> createState() => _ScheduleScreenState();
 }
 
-class _BudgetScreenState extends State<BudgetScreen> {
-  final NumberFormat _currencyFmt =
-      NumberFormat.currency(locale: 'id_ID', symbol: 'Rp ', decimalDigits: 0);
+class _ScheduleScreenState extends State<ScheduleScreen> {
+  int _selectedDay = DateTime.now().weekday > 5 ? 1 : DateTime.now().weekday;
 
-  Future> _loadBudgetData() async {
+  final List<String> _profiles = [
+    'Reguler',
+    'Blok/Praktikum',
+    'Ujian',
+    'Libur/Jamkos',
+  ];
+
+  final Map<int, String> _dayNames = {
+    1: 'Senin',
+    2: 'Selasa',
+    3: 'Rabu',
+    4: 'Kamis',
+    5: 'Jumat',
+    6: 'Sabtu',
+  };
+
+  Future> _loadScheduleAndPacking(String profile) async {
     final db = DatabaseHelper.instance;
-    final now = DateTime.now();
-
-    final budgetRaw = await db.queryAll('budget_config', where: 'id = 1');
-    final BudgetConfig config = budgetRaw.isNotEmpty
-        ? BudgetConfig.fromMap(budgetRaw.first)
-        : BudgetConfig(
-            periodName: 'Mingguan',
-            totalBudget: 210000,
-            startDate: DateFormat('yyyy-MM-dd').format(now),
-            endDate: DateFormat('yyyy-MM-dd')
-                .format(now.add(const Duration(days: 6))),
-          );
-
-    final txRaw = await db.queryAll(
-      'transactions',
-      where: 'date >= ?',
-      whereArgs: ['${config.startDate} 00:00'],
-      orderBy: 'id DESC',
+    final daySchedulesRaw = await db.queryAll(
+      'schedules',
+      where: 'profile = ? AND day_of_week = ?',
+      whereArgs: [profile, _selectedDay],
+      orderBy: 'start_time ASC',
     );
-    final transactions =
-        txRaw.map((e) => TransactionItem.fromMap(e)).toList();
+    final daySchedules =
+        daySchedulesRaw.map((e) => ScheduleItem.fromMap(e)).toList();
 
-    final double totalSpent =
-        transactions.fold(0.0, (sum, item) => sum + item.amount);
-    final double remainingBudget = config.totalBudget - totalSpent;
+    final tomorrowWeekday = (DateTime.now().weekday % 7) + 1;
+    final tomorrowRaw = await db.queryAll(
+      'schedules',
+      where: 'profile = ? AND day_of_week = ?',
+      whereArgs: [profile, tomorrowWeekday],
+      orderBy: 'start_time ASC',
+    );
+    final tomorrowSchedules =
+        tomorrowRaw.map((e) => ScheduleItem.fromMap(e)).toList();
 
-    final DateTime endDate = DateTime.parse(config.endDate);
-    final DateTime todayOnly = DateTime(now.year, now.month, now.day);
-    final int remainingDays =
-        (endDate.difference(todayOnly).inDays + 1).clamp(1, 365);
-    final double safeToday =
-        remainingBudget > 0 ? remainingBudget / remainingDays : 0.0;
+    final Set<String> tomorrowItems = {};
+    for (final s in tomorrowSchedules) {
+      tomorrowItems.addAll(s.packingList);
+    }
 
-    final envRaw = await db.queryAll('envelopes', orderBy: 'id ASC');
-    final envelopes = envRaw.map((e) => EnvelopeItem.fromMap(e)).toList();
+    final Map<String, bool> checkStates = {};
+    for (final item in tomorrowItems) {
+      final key = '${profile}_${tomorrowWeekday}_$item';
+      checkStates[item] = await db.isPackingItemChecked(key);
+    }
 
     return {
-      'config': config,
-      'transactions': transactions,
-      'remainingBudget': remainingBudget,
-      'safeToday': safeToday,
-      'envelopes': envelopes,
+      'daySchedules': daySchedules,
+      'tomorrowWeekday': tomorrowWeekday,
+      'tomorrowItems': tomorrowItems.toList(),
+      'checkStates': checkStates,
     };
   }
 
-  void _showConfigureBudgetDialog(BuildContext context, BudgetConfig current) {
-    final amountCtrl =
-        TextEditingController(text: current.totalBudget.toInt().toString());
-    String period = current.periodName;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Atur Uang Saku Periode Ini'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                value: period,
-                decoration: const InputDecoration(labelText: 'Periode'),
-                items: ['Mingguan', 'Bulanan']
-                    .map((p) => DropdownMenuItem(value: p, child: Text(p)))
-                    .toList(),
-                onChanged: (val) {
-                  if (val != null) setDialogState(() => period = val);
-                },
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: amountCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Total Uang Saku (Rp)',
-                  prefixText: 'Rp ',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Batal'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final total = double.tryParse(amountCtrl.text.trim()) ?? 0;
-                if (total <= 0) return;
-
-                final now = DateTime.now();
-                final fmt = DateFormat('yyyy-MM-dd');
-                final end = period == 'Mingguan'
-                    ? now.add(const Duration(days: 6))
-                    : DateTime(now.year, now.month + 1, 0);
-
-                final updated = BudgetConfig(
-                  id: 1,
-                  periodName: period,
-                  totalBudget: total,
-                  startDate: fmt.format(now),
-                  endDate: fmt.format(end),
-                );
-                await DatabaseHelper.instance.updateRow(
-                  'budget_config',
-                  updated.toMap(),
-                  'id = 1',
-                  [],
-                );
-                if (context.mounted) {
-                  Provider.of<AppStateProvider>(context, listen: false)
-                      .notifyAllScreens();
-                  Navigator.pop(ctx);
-                }
-              },
-              child: const Text('Simpan'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAddEnvelopeDialog(BuildContext context) {
-    final nameCtrl = TextEditingController();
-    final targetCtrl = TextEditingController();
-    final currentCtrl = TextEditingController(text: '0');
+  void _showAddScheduleDialog(BuildContext context, String activeProfile) {
+    final subjectCtrl = TextEditingController();
+    final startCtrl = TextEditingController(text: '07:00');
+    final endCtrl = TextEditingController(text: '08:30');
+    final roomCtrl = TextEditingController();
+    final uniformCtrl = TextEditingController(text: 'Putih Abu-Abu');
+    final packingCtrl = TextEditingController();
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Buat Amplop Target Baru'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Nama Target',
-                hintText: 'Contoh: Servis Motor / Upgrade Gear',
+        title: Text('Tambah Jadwal (${_dayNames[_selectedDay]})'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: subjectCtrl,
+                decoration: const InputDecoration(labelText: 'Mata Pelajaran'),
               ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: targetCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Target Nominal (Rp)',
-                prefixText: 'Rp ',
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: startCtrl,
+                      decoration: const InputDecoration(labelText: 'Jam Mulai'),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: TextField(
+                      controller: endCtrl,
+                      decoration: const InputDecoration(labelText: 'Jam Selesai'),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: currentCtrl,
-              keyboardType: TextInputType.number,
-              decoration: const InputDecoration(
-                labelText: 'Saldo Awal (Rp)',
-                prefixText: 'Rp ',
+              const SizedBox(height: 10),
+              TextField(
+                controller: roomCtrl,
+                decoration: const InputDecoration(labelText: 'Ruang / Lab'),
               ),
-            ),
-          ],
+              const SizedBox(height: 10),
+              TextField(
+                controller: uniformCtrl,
+                decoration: const InputDecoration(labelText: 'Seragam Hari Ini'),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: packingCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Tag Barang Bawaan (pisahkan koma)',
+                  hintText: 'Jas Lab, Kalkulator, Buku Paket',
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
@@ -187,427 +137,234 @@ class _BudgetScreenState extends State<BudgetScreen> {
           ),
           FilledButton(
             onPressed: () async {
-              final target = double.tryParse(targetCtrl.text.trim()) ?? 0;
-              final curr = double.tryParse(currentCtrl.text.trim()) ?? 0;
-              if (nameCtrl.text.trim().isEmpty || target <= 0) return;
-
-              final env = EnvelopeItem(
-                name: nameCtrl.text.trim(),
-                targetAmount: target,
-                currentAmount: curr,
-                iconName: 'savings',
+              if (subjectCtrl.text.trim().isEmpty) return;
+              final item = ScheduleItem(
+                profile: activeProfile,
+                dayOfWeek: _selectedDay,
+                startTime: startCtrl.text.trim(),
+                endTime: endCtrl.text.trim(),
+                subjectName: subjectCtrl.text.trim(),
+                room: roomCtrl.text.trim(),
+                uniform: uniformCtrl.text.trim(),
+                packingItems: packingCtrl.text.trim(),
               );
               await DatabaseHelper.instance
-                  .insertRow('envelopes', env.toMap());
+                  .insertRow('schedules', item.toMap());
               if (context.mounted) {
                 Provider.of<AppStateProvider>(context, listen: false)
                     .notifyAllScreens();
                 Navigator.pop(ctx);
               }
             },
-            child: const Text('Buat'),
+            child: const Text('Simpan'),
           ),
         ],
-      ),
-    );
-  }
-
-  void _showSweepDialog(
-    BuildContext context,
-    double safeToday,
-    List<EnvelopeItem> envelopes,
-  ) {
-    if (safeToday <= 0 || envelopes.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-              'Tidak ada sisa jatah hari ini atau belum ada Amplop Target.'),
-        ),
-      );
-      return;
-    }
-
-    EnvelopeItem selectedEnv = envelopes.first;
-    final sweepAmountCtrl =
-        TextEditingController(text: safeToday.floor().toString());
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Tutup Buku Harian (Sweep)'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                'Pindahkan sisa jatah jajan hari ini ke dalam Amplop Target tabunganmu:',
-                style: TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: sweepAmountCtrl,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: 'Nominal Disimpan (Rp)',
-                  prefixText: 'Rp ',
-                ),
-              ),
-              const SizedBox(height: 12),
-              DropdownButtonFormField<EnvelopeItem>(
-                value: selectedEnv,
-                decoration: const InputDecoration(labelText: 'Pilih Amplop'),
-                items: envelopes
-                    .map((e) => DropdownMenuItem(value: e, child: Text(e.name)))
-                    .toList(),
-                onChanged: (val) {
-                  if (val != null) setDialogState(() => selectedEnv = val);
-                },
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Batal'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final amount =
-                    double.tryParse(sweepAmountCtrl.text.trim()) ?? 0;
-                if (amount <= 0) return;
-
-                final db = DatabaseHelper.instance;
-                // 1. Tambah saldo ke amplop terpilih
-                await db.updateRow(
-                  'envelopes',
-                  {'current_amount': selectedEnv.currentAmount + amount},
-                  'id = ?',
-                  [selectedEnv.id],
-                );
-
-                // 2. Catat sebagai transaksi pengeluaran sweep agar jatah harian terpotong
-                final tx = TransactionItem(
-                  title: 'Sweep ke Amplop: ${selectedEnv.name}',
-                  amount: amount,
-                  category: 'Sweep Tabungan',
-                  date: DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now()),
-                );
-                await db.insertRow('transactions', tx.toMap());
-
-                if (context.mounted) {
-                  Provider.of<AppStateProvider>(context, listen: false)
-                      .notifyAllScreens();
-                  Navigator.pop(ctx);
-                }
-              },
-              child: const Text('Pindahkan Sekarang'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showAddTransactionDialog(BuildContext context) {
-    final titleCtrl = TextEditingController();
-    final amountCtrl = TextEditingController();
-    final unpaidCtrl = TextEditingController();
-    String category = 'Makan/Minum';
-    bool isSettled = true;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Text('Catat Pengeluaran / Patungan'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: titleCtrl,
-                  decoration: const InputDecoration(labelText: 'Keperluan'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: amountCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Nominal (Rp)',
-                    prefixText: 'Rp ',
-                  ),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: category,
-                  decoration: const InputDecoration(labelText: 'Tag Kategori'),
-                  items: [
-                    'Makan/Minum',
-                    'Bensin/Transport',
-                    'Print/Fotokopi',
-                    'Patungan/Kas Kelas',
-                  ]
-                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                      .toList(),
-                  onChanged: (val) {
-                    if (val != null) setDialogState(() => category = val);
-                  },
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: unpaidCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Catatan Patungan (Opsional)',
-                    hintText: 'Contoh: Azi & Zuhair belum bayar Rp10rb',
-                  ),
-                ),
-                SwitchListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: const Text('Sudah Lunas Semua'),
-                  value: isSettled,
-                  onChanged: (val) => setDialogState(() => isSettled = val),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Batal'),
-            ),
-            FilledButton(
-              onPressed: () async {
-                final amount = double.tryParse(amountCtrl.text.trim()) ?? 0;
-                if (titleCtrl.text.trim().isEmpty || amount <= 0) return;
-
-                final tx = TransactionItem(
-                  title: titleCtrl.text.trim(),
-                  amount: amount,
-                  category: category,
-                  date: DateFormat('yyyy-MM-dd HH:mm').format(DateTime.now()),
-                  unpaidNotes: unpaidCtrl.text.trim(),
-                  isSettled: isSettled,
-                );
-                await DatabaseHelper.instance
-                    .insertRow('transactions', tx.toMap());
-                if (context.mounted) {
-                  Provider.of<AppStateProvider>(context, listen: false)
-                      .notifyAllScreens();
-                  Navigator.pop(ctx);
-                }
-              },
-              child: const Text('Simpan'),
-            ),
-          ],
-        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    Provider.of<AppStateProvider>(context);
+    final appState = Provider.of<AppStateProvider>(context);
+    final activeProfile = appState.activeScheduleProfile;
 
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          'Micro-Budgeting & Amplop',
+          'Dynamic Schedule & Tas',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         actions: [
           IconButton(
-            onPressed: () => _showAddTransactionDialog(context),
-            icon: const Icon(Icons.add_card),
-            tooltip: 'Catat Transaksi',
+            onPressed: () => _showAddScheduleDialog(context, activeProfile),
+            icon: const Icon(Icons.add_circle_outline),
+            tooltip: 'Tambah Jadwal',
           ),
         ],
       ),
-      body: FutureBuilder>(
-        future: _loadBudgetData(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
+      body: Column(
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            child: Row(
+              children: _profiles.map((prof) {
+                final isSelected = prof == activeProfile;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(prof),
+                    selected: isSelected,
+                    onSelected: (_) {
+                      appState.setScheduleProfile(prof);
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+            child: Row(
+              children: _dayNames.entries.map((entry) {
+                final selected = entry.key == _selectedDay;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 6),
+                  child: FilterChip(
+                    label: Text(entry.value),
+                    selected: selected,
+                    onSelected: (_) {
+                      setState(() => _selectedDay = entry.key);
+                    },
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder(
+              future: _loadScheduleAndPacking(activeProfile),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
 
-          final data = snapshot.data!;
-          final BudgetConfig config = data['config'];
-          final double remainingBudget = data['remainingBudget'];
-          final double safeToday = data['safeToday'];
-          final List<EnvelopeItem> envelopes = data['envelopes'];
-          final List<TransactionItem> transactions = data['transactions'];
+                final data = snapshot.data as Map<String, dynamic>;
+                final List<ScheduleItem> schedules =
+                    data['daySchedules'] as List<ScheduleItem>;
+                final int tomorrowWeekday = data['tomorrowWeekday'] as int;
+                final List<String> tomorrowItems =
+                    data['tomorrowItems'] as List<String>;
+                final Map<String, bool> checkStates =
+                    data['checkStates'] as Map<String, bool>;
 
-          return ListView(
-            padding: const EdgeInsets.all(16),
-            children: [
-              // KARTU BUDGET UTAMA & TUTUP BUKU HARIAN
-              Card(
-                color: Theme.of(context).colorScheme.primaryContainer,
-                child: Padding(
+                return ListView(
                   padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Budget ${config.periodName}',
-                            style: const TextStyle(fontWeight: FontWeight.bold),
+                  children: [
+                    if (activeProfile == 'Libur/Jamkos')
+                      Card(
+                        color: Theme.of(context).colorScheme.tertiaryContainer,
+                        child: const Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text(
+                            'Mode Libur / Jamkos aktif! Gunakan waktu luang untuk cicil Flashcard atau Proyek DIY.',
+                            style: TextStyle(fontWeight: FontWeight.w600),
                           ),
-                          IconButton(
-                            icon: const Icon(Icons.settings, size: 20),
-                            onPressed: () =>
-                                _showConfigureBudgetDialog(context, config),
+                        ),
+                      )
+                    else if (schedules.isEmpty)
+                      const Card(
+                        child: Padding(
+                          padding: EdgeInsets.all(16),
+                          child: Text('Belum ada jadwal pelajaran di hari ini.'),
+                        ),
+                      )
+                    else
+                      ...schedules.map(
+                        (s) => Card(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          child: ListTile(
+                            leading: CircleAvatar(
+                              child: Text(s.startTime.substring(0, 2)),
+                            ),
+                            title: Text(
+                              s.subjectName,
+                              style:
+                                  const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('${s.startTime} - ${s.endTime} • ${s.room}'),
+                                if (s.packingItems.isNotEmpty)
+                                  Text(
+                                    'Bawaan: ${s.packingItems}',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color:
+                                          Theme.of(context).colorScheme.primary,
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline),
+                              onPressed: () async {
+                                await DatabaseHelper.instance.deleteRow(
+                                  'schedules',
+                                  'id = ?',
+                                  [s.id],
+                                );
+                                appState.notifyAllScreens();
+                              },
+                            ),
                           ),
-                        ],
+                        ),
                       ),
-                      Text(
-                        'Sisa Saldo: ${_currencyFmt.format(remainingBudget)}',
-                        style: const TextStyle(
-                            fontSize: 22, fontWeight: FontWeight.bold),
-                      ),
-                      Text(
-                        'Jatah Aman Hari Ini: ${_currencyFmt.format(safeToday)}',
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                      const SizedBox(height: 12),
-                      FilledButton.icon(
-                        onPressed: () =>
-                            _showSweepDialog(context, safeToday, envelopes),
-                        icon: const Icon(Icons.savings),
-                        label: const Text('Tutup Buku Harian (Sweep Sisa)'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // AMPLOP TARGET (SINKING FUNDS)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Amplop Target (Sinking Funds)',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                  TextButton.icon(
-                    onPressed: () => _showAddEnvelopeDialog(context),
-                    icon: const Icon(Icons.add, size: 18),
-                    label: const Text('Amplop'),
-                  ),
-                ],
-              ),
-              ...envelopes.map(
-                (env) => Card(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  child: Padding(
-                    padding: const EdgeInsets.all(14),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    const SizedBox(height: 16),
+                    Card(
+                      child: Padding(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
-                              env.name,
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold),
+                            Row(
+                              children: [
+                                Icon(Icons.checklist_rtl,
+                                    color:
+                                        Theme.of(context).colorScheme.primary),
+                                const SizedBox(width: 8),
+                                Text(
+                                  'Smart Packing List (${_dayNames[tomorrowWeekday] ?? 'Besok'})',
+                                  style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold),
+                                ),
+                              ],
                             ),
-                            Text(
-                              '${(env.progress * 100).toInt()}%',
-                              style:
-                                  const TextStyle(fontWeight: FontWeight.bold),
+                            const SizedBox(height: 6),
+                            const Text(
+                              'Otomatis ditarik dari tag barang bawaan jadwal besok:',
+                              style: TextStyle(fontSize: 12),
                             ),
+                            const Divider(height: 18),
+                            if (tomorrowItems.isEmpty)
+                              const Text(
+                                  'Tidak ada barang khusus yang perlu disiapkan.')
+                            else
+                              ...tomorrowItems.map((item) {
+                                final checked = checkStates[item] ?? false;
+                                final key =
+                                    '${activeProfile}_${tomorrowWeekday}_$item';
+                                return CheckboxListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  value: checked,
+                                  title: Text(
+                                    item,
+                                    style: TextStyle(
+                                      decoration: checked
+                                          ? TextDecoration.lineThrough
+                                          : null,
+                                    ),
+                                  ),
+                                  onChanged: (val) async {
+                                    await DatabaseHelper.instance
+                                        .togglePackingItem(key, val ?? false);
+                                    appState.notifyAllScreens();
+                                  },
+                                );
+                              }),
                           ],
                         ),
-                        const SizedBox(height: 6),
-                        LinearProgressIndicator(
-                          value: env.progress,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '${_currencyFmt.format(env.currentAmount)} / ${_currencyFmt.format(env.targetAmount)}',
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                      ],
+                      ),
                     ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-
-              // LOG PENGELUARAN & PATUNGAN
-              const Text(
-                'Log Pengeluaran & Catatan Patungan',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-              ...transactions.map(
-                (tx) => Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: ListTile(
-                    title: Text(
-                      tx.title,
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('${tx.category} • ${tx.date}'),
-                        if (tx.unpaidNotes.isNotEmpty)
-                          Text(
-                            tx.isSettled
-                                ? 'Lunas: ${tx.unpaidNotes}'
-                                : 'Belum Lunas: ${tx.unpaidNotes}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: tx.isSettled ? Colors.green : Colors.red,
-                            ),
-                          ),
-                      ],
-                    ),
-                    trailing: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          _currencyFmt.format(tx.amount),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        if (!tx.isSettled)
-                          InkWell(
-                            onTap: () async {
-                              await DatabaseHelper.instance.updateRow(
-                                'transactions',
-                                {'is_settled': 1},
-                                'id = ?',
-                                [tx.id],
-                              );
-                              if (context.mounted) {
-                                Provider.of<AppStateProvider>(context,
-                                        listen: false)
-                                    .notifyAllScreens();
-                              }
-                            },
-                            child: const Text(
-                              'Tandai Lunas',
-                              style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.blue,
-                                  decoration: TextDecoration.underline),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          );
-        },
+                  ],
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

@@ -315,15 +315,16 @@ class _ProjectScreenState extends State<ProjectScreen>
         controller: _tabController,
         children: [
           // TAB 1: COMPETITION & EVENT TRACKER
-          FutureBuilder<List>>(
+          FutureBuilder(
             future: DatabaseHelper.instance
                 .queryAll('events', orderBy: 'event_date ASC'),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
+              final rawList = snapshot.data as List>;
               final events =
-                  snapshot.data!.map((e) => EventItem.fromMap(e)).toList();
+                  rawList.map((e) => EventItem.fromMap(e)).toList();
 
               return ListView(
                 padding: const EdgeInsets.all(16),
@@ -383,15 +384,16 @@ class _ProjectScreenState extends State<ProjectScreen>
           ),
 
           // TAB 2: REHEARSAL & SETLIST MANAGER
-          FutureBuilder<List>>(
+          FutureBuilder(
             future:
                 DatabaseHelper.instance.queryAll('setlists', orderBy: 'id DESC'),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
+              final rawList = snapshot.data as List>;
               final songs =
-                  snapshot.data!.map((e) => SetlistItem.fromMap(e)).toList();
+                  rawList.map((e) => SetlistItem.fromMap(e)).toList();
 
               return ListView(
                 padding: const EdgeInsets.all(16),
@@ -454,15 +456,16 @@ class _ProjectScreenState extends State<ProjectScreen>
           ),
 
           // TAB 3: DIY / CRAFT INVENTORY & BOM
-          FutureBuilder<List>>(
+          FutureBuilder(
             future: DatabaseHelper.instance
                 .queryAll('bom_items', orderBy: 'project_name ASC'),
             builder: (context, snapshot) {
               if (!snapshot.hasData) {
                 return const Center(child: CircularProgressIndicator());
               }
+              final rawList = snapshot.data as List>;
               final items =
-                  snapshot.data!.map((e) => BomItem.fromMap(e)).toList();
+                  rawList.map((e) => BomItem.fromMap(e)).toList();
 
               final double totalUnbought = items
                   .where((i) => i.status == 'Belum Beli')

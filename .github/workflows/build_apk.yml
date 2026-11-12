@@ -1,50 +1,85 @@
-name: Build Android APK
-​on:
-push:
-branches:
-- main
-workflow_dispatch:
-​permissions:
-contents: write
-​jobs:
-build-apk:
-name: Build Release APK
-runs-on: ubuntu-latest
-​steps:
-- name: Checkout Repository
-uses: actions/checkout@v4
-​- name: Setup Java 17
-uses: actions/setup-java@v4
-with:
-distribution: temurin
-java-version: 17
-​- name: Setup Flutter
-uses: subosito/flutter-action@v2
-with:
-channel: stable
-cache: true
-​- name: Backup Manifest
-run: cp android/app/src/main/AndroidManifest.xml manifest.bak || true
-​- name: Create Android Project
-run: flutter create . --project-name personal_student_os --platforms android
-​- name: Restore Manifest
-run: cp manifest.bak android/app/src/main/AndroidManifest.xml || true
-​- name: Add Flutter Packages
-run: flutter pub add flutter_localizations --sdk=flutter && flutter pub add sqflite path provider image_picker path_provider "flutter_local_notifications:^17.2.3" intl
-​- name: Configure Android Gradle
-run: python3 -c "import pathlib; kts=pathlib.Path('android/app/build.gradle.kts'); grv=pathlib.Path('android/app/build.gradle'); nl=chr(10); kts.write_text(kts.read_text().replace('compileOptions {', 'compileOptions {' + nl + '        isCoreLibraryDesugaringEnabled = true') + nl + 'dependencies {' + nl + '    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")' + nl + '}' + nl) if kts.exists() else (grv.write_text(grv.read_text().replace('compileOptions {', 'compileOptions {' + nl + '        coreLibraryDesugaringEnabled true') + nl + 'dependencies {' + nl + '    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"' + nl + '}' + nl) if grv.exists() else None)"
-​- name: Clean Default Test
-run: rm -f test/widget_test.dart
-​- name: Build Release APK
-run: flutter build apk --release
-​- name: Upload Artifact
-uses: actions/upload-artifact@v4
-with:
-name: Personal-Student-OS-APK
-path: build/app/outputs/flutter-apk/app-release.apk
-​- name: Publish Release
-uses: softprops/action-gh-release@v2
-with:
-tag_name: v1.0.{{ github.run_number }}
-name: Personal Student OS v1.0.{{ github.run_number }}
-files: build/app/outputs/flutter-apk/app-release.apk
+{
+  "name": "Build Android APK",
+  "on": {
+    "push": {
+      "branches": ["main"]
+    },
+    "workflow_dispatch": {}
+  },
+  "permissions": {
+    "contents": "write"
+  },
+  "jobs": {
+    "build-apk": {
+      "name": "Build Release APK",
+      "runs-on": "ubuntu-latest",
+      "steps": [
+        {
+          "name": "Checkout Repository",
+          "uses": "actions/checkout@v4"
+        },
+        {
+          "name": "Setup Java 17",
+          "uses": "actions/setup-java@v4",
+          "with": {
+            "distribution": "temurin",
+            "java-version": "17"
+          }
+        },
+        {
+          "name": "Setup Flutter",
+          "uses": "subosito/flutter-action@v2",
+          "with": {
+            "channel": "stable",
+            "cache": true
+          }
+        },
+        {
+          "name": "Backup Manifest",
+          "run": "cp android/app/src/main/AndroidManifest.xml manifest.bak || true"
+        },
+        {
+          "name": "Create Android Project",
+          "run": "flutter create . --project-name personal_student_os --platforms android"
+        },
+        {
+          "name": "Restore Manifest",
+          "run": "cp manifest.bak android/app/src/main/AndroidManifest.xml || true"
+        },
+        {
+          "name": "Add Flutter Packages",
+          "run": "flutter pub add flutter_localizations --sdk=flutter && flutter pub add sqflite path provider image_picker path_provider 'flutter_local_notifications:^17.2.3' intl"
+        },
+        {
+          "name": "Configure Android Gradle",
+          "run": "python3 -c \"import pathlib; kts=pathlib.Path('android/app/build.gradle.kts'); grv=pathlib.Path('android/app/build.gradle'); nl=chr(10); q=chr(34); kts.write_text(kts.read_text().replace('compileOptions {', 'compileOptions {' + nl + '        isCoreLibraryDesugaringEnabled = true') + nl + 'dependencies {' + nl + '    coreLibraryDesugaring(' + q + 'com.android.tools:desugar_jdk_libs:2.1.4' + q + ')' + nl + '}' + nl) if kts.exists() else (grv.write_text(grv.read_text().replace('compileOptions {', 'compileOptions {' + nl + '        coreLibraryDesugaringEnabled true') + nl + 'dependencies {' + nl + '    coreLibraryDesugaring ' + q + 'com.android.tools:desugar_jdk_libs:2.1.4' + q + nl + '}' + nl) if grv.exists() else None)\""
+        },
+        {
+          "name": "Clean Default Test",
+          "run": "rm -f test/widget_test.dart"
+        },
+        {
+          "name": "Build Release APK",
+          "run": "flutter build apk --release"
+        },
+        {
+          "name": "Upload Artifact",
+          "uses": "actions/upload-artifact@v4",
+          "with": {
+            "name": "Personal-Student-OS-APK",
+            "path": "build/app/outputs/flutter-apk/app-release.apk"
+          }
+        },
+        {
+          "name": "Publish Release",
+          "uses": "softprops/action-gh-release@v2",
+          "with": {
+            "tag_name": "v1.0.${{ github.run_number }}",
+            "name": "Personal Student OS v1.0.${{ github.run_number }}",
+            "files": "build/app/outputs/flutter-apk/app-release.apk"
+          }
+        }
+      ]
+    }
+  }
+}

@@ -29,7 +29,6 @@ class DatabaseHelper {
   }
 
   Future<void> _onCreate(Database db, int version) async {
-    // 1. Pengaturan Aplikasi
     await db.execute('''
       CREATE TABLE app_settings (
         key TEXT PRIMARY KEY,
@@ -37,7 +36,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 2. Jadwal Pelajaran Fleksibel
     await db.execute('''
       CREATE TABLE schedules (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,7 +50,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 3. Status Checklist Barang Bawaan Harian
     await db.execute('''
       CREATE TABLE packing_checks (
         item_key TEXT PRIMARY KEY,
@@ -60,7 +57,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 4. Mata Pelajaran & Konfigurasi Bobot Rapor
     await db.execute('''
       CREATE TABLE subjects (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -76,7 +72,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 5. Nilai Per Komponen
     await db.execute('''
       CREATE TABLE grades (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -89,7 +84,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 6. Tugas & PR
     await db.execute('''
       CREATE TABLE tasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -102,7 +96,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 7. Sub-tugas (Mode Kelompok)
     await db.execute('''
       CREATE TABLE subtasks (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -114,7 +107,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 8. Visual Flashcard Vault
     await db.execute('''
       CREATE TABLE flashcards (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -127,7 +119,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 9. Kotak Penutup (Occlusion Boxes) pada Gambar Flashcard
     await db.execute('''
       CREATE TABLE occlusion_boxes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -141,7 +132,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 10. Konfigurasi Budget Periode Aktif
     await db.execute('''
       CREATE TABLE budget_config (
         id INTEGER PRIMARY KEY,
@@ -152,7 +142,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 11. Amplop Target (Sinking Funds)
     await db.execute('''
       CREATE TABLE envelopes (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -163,7 +152,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 12. Log Transaksi Pengeluaran & Patungan
     await db.execute('''
       CREATE TABLE transactions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -176,7 +164,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 13. Tracker Lomba, Ujian & Event (Terhubung ke Conflict Alert)
     await db.execute('''
       CREATE TABLE events (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -188,7 +175,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 14. Rehearsal & Setlist Manager
     await db.execute('''
       CREATE TABLE setlists (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -200,7 +186,6 @@ class DatabaseHelper {
       )
     ''');
 
-    // 15. DIY / Craft Inventory & Bill of Materials (BOM)
     await db.execute('''
       CREATE TABLE bom_items (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -223,13 +208,11 @@ class DatabaseHelper {
     final inThreeDaysStr = fmt.format(now.add(const Duration(days: 3)));
     final inFiveDaysStr = fmt.format(now.add(const Duration(days: 5)));
 
-    // Pengaturan Awal
     await db.insert('app_settings', {
       'key': 'active_schedule_profile',
       'value': 'Reguler',
     });
 
-    // Seed Jadwal Reguler (Senin - Jumat)
     final sampleSchedules = [
       {
         'profile': 'Reguler',
@@ -331,7 +314,6 @@ class DatabaseHelper {
         'uniform': 'Seragam Pramuka',
         'packing_items': 'Buku Teks Bahasa Indonesia, Kliping Artikel',
       },
-      // Sample Jadwal Blok/Praktikum
       {
         'profile': 'Blok/Praktikum',
         'day_of_week': now.weekday > 5 ? 1 : now.weekday,
@@ -342,7 +324,6 @@ class DatabaseHelper {
         'uniform': 'Seragam Praktikum / Jas Lab',
         'packing_items': 'Jas Lab, Laporan Sementara, Kalkulator',
       },
-      // Sample Jadwal Ujian
       {
         'profile': 'Ujian',
         'day_of_week': now.weekday > 5 ? 1 : now.weekday,
@@ -359,7 +340,6 @@ class DatabaseHelper {
       await db.insert('schedules', s);
     }
 
-    // Seed Mata Pelajaran & Nilai
     final mathId = await db.insert('subjects', {
       'name': 'Matematika Lanjut',
       'kkm': 75.0,
@@ -419,7 +399,6 @@ class DatabaseHelper {
       'date': todayStr,
     });
 
-    // Seed Tugas & Kelompok
     final groupTaskId = await db.insert('tasks', {
       'title': 'Laporan Observasi Lapangan & Presentasi',
       'subject_name': 'Bahasa Indonesia',
@@ -456,7 +435,6 @@ class DatabaseHelper {
       'is_group': 0,
     });
 
-    // Seed Flashcard Contoh (Tanpa gambar dulu, bisa ditambah foto langsung)
     await db.insert('flashcards', {
       'subject_name': 'Fisika',
       'title': 'Rumus Gerak Lurus Berubah Beraturan (GLBB)',
@@ -466,7 +444,6 @@ class DatabaseHelper {
       'interval_days': 1,
     });
 
-    // Seed Budget & Amplop Target
     final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
     final endOfWeek = startOfWeek.add(const Duration(days: 6));
     await db.insert('budget_config', {
@@ -513,7 +490,6 @@ class DatabaseHelper {
       'is_settled': 0,
     });
 
-    // Seed Events (Terhubung ke Conflict Alert Banner)
     await db.insert('events', {
       'title': 'Ulangan Harian Fisika & Matematika',
       'category': 'Ujian',
@@ -529,7 +505,6 @@ class DatabaseHelper {
       'notes': 'Upload 2 foto human interest + caption',
     });
 
-    // Seed Setlist Latihan
     await db.insert('setlists', {
       'song_title': 'Tafsir Mistik',
       'artist': 'The Panturas',
@@ -545,7 +520,6 @@ class DatabaseHelper {
       'notes': 'Sinkronisasi dinamika drum & bass di intro',
     });
 
-    // Seed DIY / Craft BOM
     await db.insert('bom_items', {
       'project_name': 'DIY Drum Module & Pad',
       'item_name': 'Sensor Piezo 27mm + Kabel Shielded',
@@ -562,7 +536,6 @@ class DatabaseHelper {
     });
   }
 
-  // ==================== HELPER SETTINGS ====================
   Future<String> getActiveScheduleProfile() async {
     final db = await database;
     final res = await db.query(
@@ -585,7 +558,6 @@ class DatabaseHelper {
     );
   }
 
-  // ==================== HELPER PACKING CHECKS ====================
   Future<bool> isPackingItemChecked(String itemKey) async {
     final db = await database;
     final res = await db.query(
@@ -606,8 +578,7 @@ class DatabaseHelper {
     );
   }
 
-  // ==================== GENERIC CRUD HELPERS ====================
-  Future<List>> queryAll(
+  Future<dynamic> queryAll(
     String table, {
     String? where,
     List<Object?>? whereArgs,
